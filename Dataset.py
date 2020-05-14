@@ -5,17 +5,54 @@ import tensorflow as tf
 from tensorflow.keras.layers import Dense, Conv2D, Flatten, MaxPooling2D
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from skimage import color, transform
+from PIL import Image, ImageFile
+import util
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
-class CatDataset:
+class ColorizerDataGenerator:
+    def __init__(self, image_data_generator, **kwargs):
+        self.image_data_generator = image_data_generator
+        self.virtual_length = kwargs.get("virtual_length", None)
+
+    @property
+    def labels(self):
+        return self.image_data_generator.labels
+
+    def __len__(self):
+        return len(self.image_data_generator) if self.virtual_length is None else self.virtual_length
+
+    def __call__(self):
+        while True:
+            rgb_batch = self.image_data_generator.next()
+            lab_batch = color.rgb2lab(rgb_batch).astype(np.float32)
+            l_batch = util.normalize_l_channel(lab_batch[:, :, :, 0][..., np.newaxis])
+            ab_batch = util.normalize_ab_channels(lab_batch[:, :, :, 1:])
+            yield l_batch, ab_batch
+
+    def __next__(self):
+        return next(self())
+
+    def __iter__(self):
+        return self()
+
+    def next(self):
+        return next(self())
+
+
+class CatColorizerDataset:
     _URL = r"https://www.kaggle.com/ma7555/cat-breeds-dataset/download/"
     _DIR = r'C:\Users\gince\Documents\GitHub\Cat-Breeds-Classification\Data\cat-breeds-dataset/'
 
     BATCH_SIZE = 256
-    IMG_HEIGHT = 150
-    IMG_WIDTH = 150
+    IMG_SIZE = 80  # must be more than 80, 80 is recommended
+    VAL_SPLIT = 0.5
 
-    def __init__(self):
+    def __init__(self, **kwargs):
+        self.IMG_SIZE = kwargs.get("img_size", CatColorizerDataset.IMG_SIZE)
+        self.BATCH_SIZE = kwargs.get("batch_size", CatColorizerDataset.BATCH_SIZE)
+
         # self.path_to_zip = tf.keras.utils.get_file('cat-breeds-dataset.zip', origin=self._URL, extract=True)
         # print(f"Data saved to: {self.path_to_zip}")
         # self.PATH = os.path.join(os.path.dirname(self.path_to_zip), '/cat-breeds-dataset/images')
@@ -28,57 +65,67 @@ class CatDataset:
             height_shift_range=.15,
             horizontal_flip=True,
             zoom_range=0.5,
-            validation_split=0.2,
-            # preprocessing_function=tf.image.rgb_to_grayscale,
+            validation_split=self.VAL_SPLIT,
         )  # Generator for our training data
 
-        self.train_data_gen = self.image_generator.flow_from_directory(batch_size=self.BATCH_SIZE,
-                                                                       directory=self.PATH,
-                                                                       shuffle=True,
-                                                                       target_size=(self.IMG_HEIGHT, self.IMG_WIDTH),
-                                                                       class_mode='input',
-                                                                       subset="training")
-
-        self.val_data_gen = self.image_generator.flow_from_directory(batch_size=self.BATCH_SIZE,
-                                                                     directory=self.PATH,
-                                                                     target_size=(self.IMG_HEIGHT, self.IMG_WIDTH),
-                                                                     class_mode='input',
-                                                                     subset="validation")
-
-        self.inception_resnet_v2_model = tf.keras.applications.InceptionResNetV2(
-            input_shape=(self.IMG_HEIGHT, self.IMG_WIDTH, 3),
-            include_top=False,
-            weights='imagenet'
+        self.train_data_gen = ColorizerDataGenerator(
+            self.image_generator.flow_from_directory(
+                batch_size=self.BATCH_SIZE,
+                directory=self.PATH,
+                shuffle=True,
+                seed=3,
+                target_size=(self.IMG_SIZE, self.IMG_SIZE),
+                class_mode=None,
+                subset="training"
+            )
         )
-        self.inception_resnet_v2_model.trainable = False
 
-    def generate_training_data(self):
-        while True:
-            input_batch, output_batch = self.train_data_gen.next()
-            grayscale_batch = tf.image.rgb_to_grayscale(input_batch)
-            rgb_batch = tf.repeat(grayscale_batch, 3, -1)
-            resnet_features = self.inception_resnet_v2_model(rgb_batch)
-            yield [grayscale_batch, resnet_features[:, 0]], output_batch
+        self.val_data_gen = ColorizerDataGenerator(
+            self.image_generator.flow_from_directory(
+                batch_size=self.BATCH_SIZE,
+                directory=self.PATH,
+                target_size=(self.IMG_SIZE, self.IMG_SIZE),
+                class_mode=None,
+                seed=3,
+                subset="validation"
+            ),
+            virtual_length=10_000 // self.BATCH_SIZE
+        )
 
-    def generate_validation_data(self):
-        while True:
-            input_batch, output_batch = self.val_data_gen.next()
-            grayscale_batch = tf.image.rgb_to_grayscale(input_batch)
-            rgb_batch = tf.repeat(grayscale_batch, 3, -1)
-            resnet_features = self.inception_resnet_v2_model(rgb_batch)
-            yield [grayscale_batch, resnet_features], output_batch
+    @property
+    def train_length(self):
+        return len(self.train_data_gen)
+
+    @property
+    def val_length(self):
+        return len(self.val_data_gen)
+
+    @property
+    def labels(self):
+        return set(list(self.train_data_gen.labels)+list(self.val_data_gen.labels))
+
+    @property
+    def number_of_train_call(self):
+        return self.train_length // self.BATCH_SIZE
+
+    @property
+    def number_of_val_call(self):
+        return self.val_length // self.BATCH_SIZE
 
     def plot_samples(self, nb_samples=5):
-        # This function will plot images in the form of a grid
-        # with 1 row and 5 columns where images are placed in each column.
         nb_samples = min(nb_samples, self.BATCH_SIZE)
-        [sample_input, sample_resnet_features], sample_output = next(self.generate_training_data())
-        print(f"sample_resnet_features.shape: {sample_resnet_features.shape}")
+        l_batch, ab_batch = next(self.train_data_gen)
+
+        lab_batch = np.zeros((l_batch.shape[0], l_batch.shape[1], l_batch.shape[2], 3))
+        lab_batch[:, :, :, 0] = util.unnormalize_l_channel(tf.squeeze(l_batch))
+        lab_batch[:, :, :, [1, 2]] = util.unnormalize_ab_channels(ab_batch)
+
+        rgb_batch = color.lab2rgb(lab_batch)
 
         fig, axes = plt.subplots(nb_samples, 2, figsize=(10, 10))
         for i in range(nb_samples):
-            axes[i][0].imshow(tf.squeeze(sample_input[i]), cmap='gray')
-            axes[i][1].imshow(sample_output[i])
+            axes[i][0].imshow(tf.squeeze(l_batch[i]), cmap='gray')
+            axes[i][1].imshow(rgb_batch[i])
 
             axes[i][0].axis('off')
             axes[i][1].axis('off')
@@ -86,118 +133,7 @@ class CatDataset:
         plt.show()
 
 
-def plotHistory(history, epochs):
-    acc = history.history['acc']
-    val_acc = history.history['val_acc']
-
-    loss = history.history['loss']
-    val_loss = history.history['val_loss']
-
-    epochs_range = range(epochs)
-
-    plt.figure(figsize=(8, 8))
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs_range, acc, label='Training Accuracy')
-    plt.plot(epochs_range, val_acc, label='Validation Accuracy')
-    plt.legend(loc='lower right')
-    plt.title('Training and Validation Accuracy')
-
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs_range, loss, label='Training Loss')
-    plt.plot(epochs_range, val_loss, label='Validation Loss')
-    plt.legend(loc='upper right')
-    plt.title('Training and Validation Loss')
-    plt.show()
-
-
 if __name__ == '__main__':
-    dataset = CatDataset()
-    dataset.plot_samples(3)
-    # _URL = 'https://storage.googleapis.com/mledu-datasets/cats_and_dogs_filtered.zip'
-    #
-    # path_to_zip = tf.keras.utils.get_file('cats_and_dogs.zip', origin=_URL, extract=True)
-    #
-    # PATH = os.path.join(os.path.dirname(path_to_zip), 'cats_and_dogs_filtered')
-    # train_dir = os.path.join(PATH, 'train')
-    # validation_dir = os.path.join(PATH, 'validation')
-    #
-    # train_cats_dir = os.path.join(train_dir, 'cats')  # directory with our training cat pictures
-    # train_dogs_dir = os.path.join(train_dir, 'dogs')  # directory with our training dog pictures
-    # validation_cats_dir = os.path.join(validation_dir, 'cats')  # directory with our validation cat pictures
-    # validation_dogs_dir = os.path.join(validation_dir, 'dogs')  # directory with our validation dog pictures
-    #
-    # num_cats_tr = len(os.listdir(train_cats_dir))
-    # num_dogs_tr = len(os.listdir(train_dogs_dir))
-    #
-    # num_cats_val = len(os.listdir(validation_cats_dir))
-    # num_dogs_val = len(os.listdir(validation_dogs_dir))
-    #
-    # total_train = num_cats_tr + num_dogs_tr
-    # total_val = num_cats_val + num_dogs_val
-    #
-    # print('total training cat images:', num_cats_tr)
-    # print('total training dog images:', num_dogs_tr)
-    #
-    # print('total validation cat images:', num_cats_val)
-    # print('total validation dog images:', num_dogs_val)
-    # print("--")
-    # print("Total training images:", total_train)
-    # print("Total validation images:", total_val)
-    #
-    # batch_size = 128
-    # epochs = 15
-    # IMG_HEIGHT = 150
-    # IMG_WIDTH = 150
-    #
-    # train_image_generator = ImageDataGenerator(
-    #     rescale=1. / 255,
-    #     rotation_range=45,
-    #     width_shift_range=.15,
-    #     height_shift_range=.15,
-    #     horizontal_flip=True,
-    #     zoom_range=0.5
-    # )  # Generator for our training data
-    #
-    # validation_image_generator = ImageDataGenerator(rescale=1. / 255)  # Generator for our validation data
-    #
-    # train_data_gen = train_image_generator.flow_from_directory(batch_size=batch_size,
-    #                                                            directory=train_dir,
-    #                                                            shuffle=True,
-    #                                                            target_size=(IMG_HEIGHT, IMG_WIDTH),
-    #                                                            class_mode='binary')
-    #
-    # val_data_gen = validation_image_generator.flow_from_directory(batch_size=batch_size,
-    #                                                               directory=validation_dir,
-    #                                                               target_size=(IMG_HEIGHT, IMG_WIDTH),
-    #                                                               class_mode='binary')
-    #
-    # sample_training_images, _ = next(train_data_gen)
-    # plotImages(sample_training_images[:5])
-    #
-    # model = Sequential([
-    #     Conv2D(16, 3, padding='same', activation='relu', input_shape=(IMG_HEIGHT, IMG_WIDTH, 3)),
-    #     MaxPooling2D(),
-    #     Conv2D(32, 3, padding='same', activation='relu'),
-    #     MaxPooling2D(),
-    #     Conv2D(64, 3, padding='same', activation='relu'),
-    #     MaxPooling2D(),
-    #     Flatten(),
-    #     Dense(512, activation='relu'),
-    #     Dense(1)
-    # ])
-    #
-    # model.compile(optimizer='adam',
-    #               loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
-    #               metrics=['accuracy'])
-    #
-    # model.summary()
-    #
-    # history = model.fit_generator(
-    #     train_data_gen,
-    #     steps_per_epoch=total_train // batch_size,
-    #     epochs=epochs,
-    #     validation_data=val_data_gen,
-    #     validation_steps=total_val // batch_size
-    # )
-    #
-    # plotHistory(history, epochs)
+    dataset = CatColorizerDataset(img_size=256, batch_size=100)
+    dataset.plot_samples(5)
+
