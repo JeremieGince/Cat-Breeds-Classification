@@ -1,0 +1,19 @@
+York Chocolate
+American Wirehair
+Burmilla
+Canadian Hairless
+Chartreux
+Chausie
+Chinchilla
+Cymric
+Javanese
+Korat
+LaPerm
+Oriantal Long Hair
+Selkrik Rex
+Silver
+Singapura
+Somali
+
+-------------------------------------------------
+Removed Breeds cause they have less than 100 files in it.
