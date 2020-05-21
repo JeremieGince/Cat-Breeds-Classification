@@ -7,8 +7,8 @@ from tensorflow.keras.utils import plot_model
 from skimage import color, transform
 import numpy as np
 import util
-from Dataset import CatColorizerDataset
-from models import CatColorizer
+from Dataset import CatColorizerDataset, CatBreedsClassifierDataset
+from models import CatColorizer, CatBreedsClassifier
 
 print(tf.__version__)
 
@@ -50,17 +50,29 @@ def plot_cat_colorization_prediction_samples(model_manager, nb_samples=3):
     plt.show()
 
 
+def plot_history_comparison(pre_trained_history, no_pre_trained_history):
+    pass
+
+
 if __name__ == '__main__':
+    # -----------------------------------------------------------------------------------------------------------------
+    # hyper-paramètres
+    # -----------------------------------------------------------------------------------------------------------------
     BATCH_SIZE = 100
     IMG_SIZE = 80
     EPOCHS = 1
     FUSION_DEPTH = 256
 
+    # -----------------------------------------------------------------------------------------------------------------
+    # colorization
+    # -----------------------------------------------------------------------------------------------------------------
+
     col_dataset = CatColorizerDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
     # col_dataset.plot_samples(3)
     print(f"dataset labels: {col_dataset.labels}")
 
-    col_model_manager = CatColorizer(depth_after_fusion=FUSION_DEPTH, img_size=col_dataset.IMG_SIZE, name="CatColorizer")
+    col_model_manager = CatColorizer(depth_after_fusion=FUSION_DEPTH, img_size=col_dataset.IMG_SIZE,
+                                     name="CatColorizer")
     col_model_manager.build_and_compile()
     col_model_manager.load()
 
@@ -68,3 +80,57 @@ if __name__ == '__main__':
     plot_model(col_model_manager.model, to_file='Figures/CatColorizer.png', show_shapes=True)
     util.plotHistory(col_model_manager.history, col_model_manager.current_epoch)
     plot_cat_colorization_prediction_samples(col_model_manager)
+
+    plot_model(col_model_manager.model, to_file=f"Figures/{col_model_manager.name}.png",
+               show_layer_names=True, show_shapes=True)
+
+    # -----------------------------------------------------------------------------------------------------------------
+    # Classification
+    # -----------------------------------------------------------------------------------------------------------------
+
+    cls_dataset = CatBreedsClassifierDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
+
+    # ---------------------------------------------------------
+    # classification with pre-trained features
+    # ---------------------------------------------------------
+    cls_model_pretrained_manager = CatBreedsClassifier(
+        depth_after_fusion=FUSION_DEPTH,
+        img_size=IMG_SIZE,
+        output_size=cls_dataset.nb_cls,
+        cat_col_manager=col_model_manager,
+        name="CatBreedsClassifier_withPretrainedFeatures",
+        pretrained_head=True,
+    )
+
+    plot_model(cls_model_pretrained_manager.model,
+               to_file=f"Figures/{cls_model_pretrained_manager.name}.png",
+               show_layer_names=True, show_shapes=True)
+
+    cls_model_pretrained_manager.build_and_compile()
+    cls_model_pretrained_manager.load_history()
+    util.plotHistory(cls_model_pretrained_manager.history, cls_model_pretrained_manager.current_epoch)
+
+    # ---------------------------------------------------------
+    # classification without pre-trained features
+    # ---------------------------------------------------------
+    cls_model_no_pretrained_manager = CatBreedsClassifier(
+        depth_after_fusion=FUSION_DEPTH,
+        img_size=IMG_SIZE,
+        output_size=cls_dataset.nb_cls,
+        cat_col_manager=col_model_manager,
+        name="CatBreedsClassifier_withoutPretrainedFeatures",
+        pretrained_head=False,
+    )
+
+    plot_model(cls_model_no_pretrained_manager.model,
+               to_file=f"Figures/{cls_model_no_pretrained_manager.name}.png",
+               show_layer_names=True, show_shapes=True)
+
+    cls_model_no_pretrained_manager.build_and_compile()
+    cls_model_no_pretrained_manager.load_history()
+    util.plotHistory(cls_model_no_pretrained_manager.history, cls_model_no_pretrained_manager.current_epoch)
+
+    # ---------------------------------------------------------
+    # comparison
+    # ---------------------------------------------------------
+    plot_history_comparison(cls_model_pretrained_manager.history, cls_model_no_pretrained_manager.history)
