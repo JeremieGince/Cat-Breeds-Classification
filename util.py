@@ -42,7 +42,7 @@ def lab_to_rgb(img_l, img_ab):
 
 def plotHistory(history: dict, epochs):
     import matplotlib.pyplot as plt
-    print(history.keys())
+    # print(history.keys())
     acc = history['accuracy']
     val_acc = history['val_accuracy']
 
