@@ -45,8 +45,8 @@ if __name__ == '__main__':
     from Dataset import CatBreedsClassifierDataset
     BATCH_SIZE = 64
     IMG_SIZE = 80
-    FEATURES_TRAINING_EPOCHS = 35
-    CLASSIFIER_EPOCHS = 10
+    FEATURES_TRAINING_EPOCHS = 5
+    CLASSIFIER_EPOCHS = 5
     FUSION_DEPTH = 256
 
     col_dataset = CatColorizerDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     col_model_manager = CatColorizer(
         depth_after_fusion=FUSION_DEPTH,
         img_size=col_dataset.IMG_SIZE,
-        name="CatColorizer_GlorotNormal",
+        name="CatColorizer",
     )
     col_model_manager.build_and_compile()
 
