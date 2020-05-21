@@ -197,3 +197,4 @@ dmypy.json
 Data/cat-breeds-dataset/data/cats.csv
 *.zip
 *.jpg
+*.h5
