@@ -56,15 +56,15 @@ if __name__ == '__main__':
     EPOCHS = 1
     FUSION_DEPTH = 256
 
-    dataset = CatColorizerDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
-    # dataset.plot_samples(3)
-    print(f"dataset labels: {dataset.labels}")
+    col_dataset = CatColorizerDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
+    # col_dataset.plot_samples(3)
+    print(f"dataset labels: {col_dataset.labels}")
 
-    model_manager = CatColorizer(depth_after_fusion=FUSION_DEPTH, img_size=dataset.IMG_SIZE, name="CatColorizer")
-    model_manager.build_and_compile()
-    model_manager.load()
+    col_model_manager = CatColorizer(depth_after_fusion=FUSION_DEPTH, img_size=col_dataset.IMG_SIZE, name="CatColorizer")
+    col_model_manager.build_and_compile()
+    col_model_manager.load()
 
-    model_manager.model.summary()
-    plot_model(model_manager.model, to_file='Figures/CatColorizer.png', show_shapes=True)
-    util.plotHistory(model_manager.history, model_manager.current_epoch)
-    plot_cat_colorization_prediction_samples(model_manager)
+    col_model_manager.model.summary()
+    plot_model(col_model_manager.model, to_file='Figures/CatColorizer.png', show_shapes=True)
+    util.plotHistory(col_model_manager.history, col_model_manager.current_epoch)
+    plot_cat_colorization_prediction_samples(col_model_manager)
