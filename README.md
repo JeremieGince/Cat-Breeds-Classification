@@ -7,7 +7,7 @@
 
 # Citation
 
-'''
+```
 @article{Cat-Breeds-Classification,
   author          = {Jérémie Gince},
   title           = {Cat-Breeds-Classification},
@@ -16,4 +16,4 @@
   year            = 2020,
   month           = May
 }
-'''
+```
