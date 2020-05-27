@@ -73,36 +73,38 @@ if __name__ == '__main__':
     col_trainer.train(FEATURES_TRAINING_EPOCHS)
     plotHistory(col_model_manager.history)
 
-    # cls_dataset = CatBreedsClassifierDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
+    raise NotImplementedError("The classification part is not updated with the new colorizer")
+
+    cls_dataset = CatBreedsClassifierDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
 
     # classification with pre-trained features
-    # cls_model_pretrained_manager = CatBreedsClassifier(
-    #     depth_after_fusion=FUSION_DEPTH,
-    #     img_size=IMG_SIZE,
-    #     output_size=cls_dataset.nb_cls,
-    #     cat_col_manager=col_model_manager,
-    #     name="CatBreedsClassifier_withPretrainedFeatures",
-    #     pretrained_head=True,
-    # )
-    # cls_model_pretrained_manager.build_and_compile()
-    #
-    # cls_trainer = Trainer(cls_model_pretrained_manager, cls_dataset)
-    # cls_trainer.train(CLASSIFIER_EPOCHS)
-    # cls_model_pretrained_manager.load_history()
-    # plotHistory(cls_model_pretrained_manager.history)
-    #
-    # # classification without pre-trained features
-    # cls_model_no_pretrained_manager = CatBreedsClassifier(
-    #     depth_after_fusion=FUSION_DEPTH,
-    #     img_size=IMG_SIZE,
-    #     output_size=cls_dataset.nb_cls,
-    #     cat_col_manager=col_model_manager,
-    #     name="CatBreedsClassifier_withoutPretrainedFeatures",
-    #     pretrained_head=False,
-    # )
-    # cls_model_no_pretrained_manager.build_and_compile()
-    #
-    # cls_trainer = Trainer(cls_model_no_pretrained_manager, cls_dataset)
-    # cls_trainer.train(CLASSIFIER_EPOCHS)
-    # cls_model_no_pretrained_manager.load_history()
-    # plotHistory(cls_model_no_pretrained_manager.history)
+    cls_model_pretrained_manager = CatBreedsClassifier(
+        depth_after_fusion=FUSION_DEPTH,
+        img_size=IMG_SIZE,
+        output_size=cls_dataset.nb_cls,
+        cat_col_manager=col_model_manager,
+        name="CatBreedsClassifier_withPretrainedFeatures",
+        pretrained_head=True,
+    )
+    cls_model_pretrained_manager.build_and_compile()
+
+    cls_trainer = Trainer(cls_model_pretrained_manager, cls_dataset)
+    cls_trainer.train(CLASSIFIER_EPOCHS)
+    cls_model_pretrained_manager.load_history()
+    plotHistory(cls_model_pretrained_manager.history)
+
+    # classification without pre-trained features
+    cls_model_no_pretrained_manager = CatBreedsClassifier(
+        depth_after_fusion=FUSION_DEPTH,
+        img_size=IMG_SIZE,
+        output_size=cls_dataset.nb_cls,
+        cat_col_manager=col_model_manager,
+        name="CatBreedsClassifier_withoutPretrainedFeatures",
+        pretrained_head=False,
+    )
+    cls_model_no_pretrained_manager.build_and_compile()
+
+    cls_trainer = Trainer(cls_model_no_pretrained_manager, cls_dataset)
+    cls_trainer.train(CLASSIFIER_EPOCHS)
+    cls_model_no_pretrained_manager.load_history()
+    plotHistory(cls_model_no_pretrained_manager.history)
