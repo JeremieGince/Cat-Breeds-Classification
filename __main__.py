@@ -34,13 +34,13 @@ if __name__ == '__main__':
     # hyper-parameters
     # -----------------------------------------------------------------------------------------------------------------
     from hyperparameters import SEED, \
-    BATCH_SIZE,\
-    IMG_SIZE, \
-    FEATURES_TRAINING_EPOCHS, \
-    CLASSIFIER_EPOCHS, \
-    FUSION_DEPTH, \
-    GAMUT_SIZE, \
-    BINS
+                                BATCH_SIZE,\
+                                IMG_SIZE, \
+                                FEATURES_TRAINING_EPOCHS, \
+                                CLASSIFIER_EPOCHS, \
+                                FUSION_DEPTH, \
+                                GAMUT_SIZE, \
+                                BINS
 
     # setting the seed
     tf.random.set_seed(SEED)
