@@ -24,6 +24,8 @@ def get_latest_checkpoint(checkpoint_dir, ext=".h5", head="cp-"):
             if cp > cp_max:
                 cp_max = cp
                 latest = filename
+    if latest is None:
+        return None
     return checkpoint_dir + "/" + latest
 
 
@@ -31,7 +33,7 @@ class NetworkModelManager:
     def __init__(self, **kwargs):
         self.name = kwargs.get("name", "network_model")
         os.makedirs("training_data/" + self.name, exist_ok=True)
-        self.checkpoint_path = "training_data/" + self.name + "/cp-{epoch:04d}.h5"
+        self.checkpoint_path = "training_data/" + self.name + "/cp-weights.h5"
         self.history_path = f"training_data/{self.name}/cp-history.json"
         self.checkpoint_dir = os.path.dirname(self.checkpoint_path)
         self.history = dict()
@@ -43,12 +45,17 @@ class NetworkModelManager:
         return self.model.summary()
 
     def load_weights(self):
-        latest_cp: str = get_latest_checkpoint(self.checkpoint_dir, ext=".h5", head="cp-")
-        self.current_epoch = int(latest_cp[latest_cp.find("cp-") + 3:latest_cp.find(".h5")])
-        self.model.load_weights(latest_cp)
+        assert self.model is not None
+
+        # latest_cp: str = get_latest_checkpoint(self.checkpoint_dir, ext=".h5", head="cp-")
+        # if latest_cp is not None:
+        #     self.current_epoch = int(latest_cp[latest_cp.find("cp-") + 3:latest_cp.find(".h5")])
+        #     self.model.load_weights(latest_cp)
+        self.model.load_weights(self.checkpoint_path)
 
     def save_weights(self, epoch=0):
-        self.model.save(self.checkpoint_path.format(epoch=epoch))
+        # self.model.save(self.checkpoint_path.format(epoch=epoch))
+        self.model.save(self.checkpoint_path)
 
     def load_history(self):
         import json
@@ -61,8 +68,9 @@ class NetworkModelManager:
         json.dump(self.history, open(self.history_path, 'w'))
 
     def update_curr_epoch(self):
-        latest_cp: str = get_latest_checkpoint(self.checkpoint_dir, ext=".h5", head="cp-")
-        self.current_epoch = int(latest_cp[latest_cp.find("cp-") + 3:latest_cp.find(".h5")])
+        # latest_cp: str = get_latest_checkpoint(self.checkpoint_dir, ext=".h5", head="cp-")
+        # self.current_epoch = int(latest_cp[latest_cp.find("cp-") + 3:latest_cp.find(".h5")])
+        self.current_epoch = len(self.history.get("loss", []))
 
     def update_history(self, other: dict):
         temp = {**self.history, **other}
@@ -101,18 +109,30 @@ class NetworkModelManager:
 
 
 class NetworkManagerCallback(tf.keras.callbacks.Callback):
-    def __init__(self, network_manager: NetworkModelManager):
+    def __init__(self, network_manager: NetworkModelManager, **kwargs):
         super().__init__()
         self.network_manager = network_manager
+        self.verbose = kwargs.get("verbose", True)
+        self.save_freq = kwargs.get("save_freq", 1)
 
     def on_epoch_end(self, epoch, logs=None):
         self.network_manager.current_epoch = epoch
+        if epoch % self.save_freq == 0:
+            if self.verbose:
+                print(f"\n Epoch {epoch}: saving model to {self.network_manager.checkpoint_path} \n")
+            self.network_manager.save_weights()
+
+        self.network_manager.update_history({k: [v] for k, v in logs.items()})
 
 
 class CatColorizer(NetworkModelManager):
-    def __init__(self, depth_after_fusion=256, img_size=128, learning_rate=1e-3, **kwargs):
+    def __init__(self, gamut_instances, fusion_depth=256, img_size=128, learning_rate=1e-3, **kwargs):
         super(CatColorizer, self).__init__(**kwargs)
-        self.depth_after_fusion = depth_after_fusion
+        self.gamut_instances = gamut_instances
+        self.output_size = len(gamut_instances)
+        self.bins = kwargs.get("bins", 10)
+
+        self.fusion_depth = fusion_depth
         self.img_size = img_size
         self.lr = learning_rate
 
@@ -164,21 +184,23 @@ class CatColorizer(NetworkModelManager):
 
     def _build_decoder(self, fusion_output):
         # decoder
-        decoder_input = Conv2D(self.depth_after_fusion, (1, 1), activation='relu', kernel_initializer=self.initializer,
+        decoder_input = Conv2D(self.fusion_depth, (1, 1), activation='relu', kernel_initializer=self.initializer,
                                name="decoder_input")(fusion_output)
         x = Conv2D(128, (3, 3), activation='relu', padding='same', kernel_initializer=self.initializer,
                    name="conv2d_7")(decoder_input)
-        x = UpSampling2D((2, 2))(x)
+        x = UpSampling2D((2, 2), name="UpSampling2D_0")(x)
         x = Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer=self.initializer,
                    name="conv2d_8")(x)
         x = Conv2D(64, (3, 3), activation='relu', padding='same', kernel_initializer=self.initializer,
                    name="conv2d_9")(x)
-        x = UpSampling2D((2, 2))(x)
+        x = UpSampling2D((2, 2), name="UpSampling2D_1")(x)
         x = Conv2D(32, (3, 3), activation='relu', padding='same', kernel_initializer=self.initializer,
                    name="conv2d_10")(x)
-        x = Conv2D(2, (3, 3), activation='tanh', padding='same', kernel_initializer=self.initializer,
+        x = Conv2D(32, (3, 3), activation='tanh', padding='same', kernel_initializer=self.initializer,
                    name="conv2d_11")(x)
-        decoder_output = UpSampling2D((2, 2), name="decoder_output")(x)
+        x = UpSampling2D((2, 2), name="UpSampling2D_2")(x)
+        decoder_output = Conv2D(self.output_size, (1, 1), activation='tanh', padding='same',
+                                kernel_initializer=self.initializer, name="decoder_output")(x)
         return decoder_output
 
     def build(self):
@@ -187,7 +209,8 @@ class CatColorizer(NetworkModelManager):
                 self.encoder_input, self._build_encoder(self.encoder_input)
             )
         )
-        self.model = Model(self.encoder_input, decoder_output, name=self.name)
+        probability_distribution = Softmax()(decoder_output)
+        self.model = Model(self.encoder_input, probability_distribution, name=self.name)
         return self.model
 
     def get_head_with_pretrained_weights(self, encoder_input, pretrained=True):
@@ -217,23 +240,18 @@ class CatColorizer(NetworkModelManager):
         assert self.model is not None
         self.model.compile(
             optimizer=Adam(self.lr),
-            loss='mae',
+            loss=tf.keras.losses.CategoricalCrossentropy(),
             metrics=[
-                'accuracy',
-                'mse',
-                'mae',
-                'mape',
+                'accuracy'
             ]
         )
         return self.model
 
     def predict_rgb(self, l_batch):
-        ab_batch = self.model.predict(l_batch)
-        lab_batch = np.zeros((l_batch.shape[0], l_batch.shape[1], l_batch.shape[2], 3))
-        lab_batch[:, :, :, 0] = util.unnormalize_l_channel(tf.squeeze(l_batch))
-        lab_batch[:, :, :, [1, 2]] = util.unnormalize_ab_channels(ab_batch)
-        rgb_batch = color.lab2rgb(lab_batch)
-
+        probability_batch = self.model.predict(l_batch)
+        one_hot_batch = util.probability_batch2one_hot_batch(probability_batch)
+        ab_batch = util.one_hot_batch2ab_batch(one_hot_batch, self.gamut_instances, self.bins)
+        rgb_batch = util.l_and_ab_to_rgb(l_batch, ab_batch)
         return rgb_batch
 
 
@@ -249,7 +267,10 @@ class CatBreedsClassifier(NetworkModelManager):
         self.encoder_input = Input(shape=(self.img_size, self.img_size, 3), name="encoder_input_3c")
         self.cat_col_manager = kwargs.get(
             "cat_col_manager",
-            CatColorizer(self.img_size, name=kwargs.get("cat_col_name", "CatColorizer"))
+            CatColorizer(
+                self.img_size,
+                name=kwargs.get("cat_col_name", "CatColorizer")
+            )
         )
         self.head = self.cat_col_manager.get_head_with_pretrained_weights(self.encoder_input,
                                                                           pretrained=self.pretrained_head)
@@ -285,27 +306,30 @@ class CatBreedsClassifier(NetworkModelManager):
 
 if __name__ == '__main__':
     from tensorflow.keras.utils import plot_model
+    from Dataset import CatColorizerDataset
 
-    col_model_manager = CatColorizer(img_size=80, name="CatColorizer")
-    # col_model_manager.build()
-    # print(col_model_manager.summary)
-    # print(col_model_manager.model.get_weights()[-1])
-    # col_model_manager.load_weights()
-    # print(col_model_manager.model.get_weights()[-1])
-    # col_model_manager.save_weights(col_model_manager.current_epoch)
-    # col_model_manager.save_model()
+    col_dataset = CatColorizerDataset(img_size=80, batch_size=64, gamut_size=120)
 
-    breeds_classifier_manager = CatBreedsClassifier(
-        img_size=80,
-        output_size=51,
-        name="CatBreedsClassifier",
-        cat_col_manager=col_model_manager,
-        pretrained_head=False,
-    )
-    breeds_classifier_manager.build_and_compile()
-    print(breeds_classifier_manager.summary)
-    plot_model(breeds_classifier_manager.model, to_file="Figures/CatBreedsClassifier.png",
-               show_layer_names=True, show_shapes=True)
+    col_model_manager = CatColorizer(col_dataset.gamut_instances, bins=col_dataset.BINS,
+                                     img_size=80, name="CatColorizer")
+    col_model_manager.build()
+    print(col_model_manager.summary)
+    print(col_model_manager.model.get_weights()[-1])
+    col_model_manager.load_weights()
+    print(col_model_manager.model.get_weights()[-1])
+    col_model_manager.save_weights(col_model_manager.current_epoch)
+
+    # breeds_classifier_manager = CatBreedsClassifier(
+    #     img_size=80,
+    #     output_size=51,
+    #     name="CatBreedsClassifier",
+    #     cat_col_manager=col_model_manager,
+    #     pretrained_head=False,
+    # )
+    # breeds_classifier_manager.build_and_compile()
+    # print(breeds_classifier_manager.summary)
+    # plot_model(breeds_classifier_manager.model, to_file="Figures/CatBreedsClassifier.png",
+    #            show_layer_names=True, show_shapes=True)
 
     # new_history = {'loss': [1076.923828125], 'accuracy': [0.4869177043437958], 'mse': [0.010041841305792332], 'mae': [0.06346332281827927], 'mape': [1076.924072265625], 'val_loss': [330.6434020996094], 'val_accuracy': [0.7349596619606018], 'val_mse': [0.010745665989816189], 'val_mae': [0.06535135209560394], 'val_mape': [330.6432189941406]}
     # col_model_manager.load_history()
