@@ -8,7 +8,7 @@ from tensorflow.keras.initializers import GlorotNormal
 from tensorflow.keras.layers import Conv2D, Input, Reshape, RepeatVector, concatenate, \
     UpSampling2D, Flatten, Dense, BatchNormalization, Softmax
 from tensorflow.keras.models import Model, Sequential
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam, SGD
 
 import util
 
@@ -239,7 +239,7 @@ class CatColorizer(NetworkModelManager):
     def compile(self):
         assert self.model is not None
         self.model.compile(
-            optimizer=Adam(self.lr),
+            optimizer=SGD(self.lr, nesterov=True, momentum=0.3),
             loss=tf.keras.losses.CategoricalCrossentropy(),
             metrics=[
                 'accuracy'
