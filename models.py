@@ -11,6 +11,7 @@ from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.optimizers import Adam, SGD
 
 import util
+from hyperparameters import *
 
 os.environ["PATH"] += os.pathsep + r'C:\Program Files (x86)\Graphviz2.38\bin/'
 
@@ -126,7 +127,8 @@ class NetworkManagerCallback(tf.keras.callbacks.Callback):
 
 
 class CatColorizer(NetworkModelManager):
-    def __init__(self, gamut_instances, fusion_depth=256, img_size=128, learning_rate=1e-3, **kwargs):
+    def __init__(self, gamut_instances, fusion_depth=FUSION_DEPTH, img_size=IMG_SIZE,
+                 learning_rate=COL_LEARNING_RATE, **kwargs):
         super(CatColorizer, self).__init__(**kwargs)
         self.gamut_instances = gamut_instances
         self.output_size = len(gamut_instances)
@@ -135,6 +137,7 @@ class CatColorizer(NetworkModelManager):
         self.fusion_depth = fusion_depth
         self.img_size = img_size
         self.lr = learning_rate
+        self.momentum = kwargs.get("momentum", COL_MOMENTUM)
 
         self.encoder_input = Input(shape=(self.img_size, self.img_size, 1), name="encoder_input_1c")
         self.inception_resnet_v2_model = tf.keras.applications.InceptionResNetV2(
@@ -239,7 +242,7 @@ class CatColorizer(NetworkModelManager):
     def compile(self):
         assert self.model is not None
         self.model.compile(
-            optimizer=SGD(self.lr, nesterov=True, momentum=0.3),
+            optimizer=SGD(self.lr, nesterov=True, momentum=self.momentum),
             loss=tf.keras.losses.CategoricalCrossentropy(),
             metrics=[
                 'accuracy'
@@ -256,7 +259,7 @@ class CatColorizer(NetworkModelManager):
 
 
 class CatBreedsClassifier(NetworkModelManager):
-    def __init__(self, img_size=128, learning_rate=1e-3, output_size=1, **kwargs):
+    def __init__(self, img_size=IMG_SIZE, learning_rate=CLS_LEARNING_RATE, output_size=1, **kwargs):
         super(CatBreedsClassifier, self).__init__(**kwargs)
         self.img_size = img_size
         self.learning_rate = learning_rate
