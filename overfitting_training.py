@@ -6,9 +6,7 @@ if __name__ == '__main__':
     from hyperparameters import *
 
     BATCH_SIZE = 1
-    IMG_SIZE = 80
     FEATURES_TRAINING_EPOCHS = 1_000
-    BINS = 10
     GAMUT_SIZE = 5
 
     col_overfitting_dataset = CatColorizerOverfittingDataset(
