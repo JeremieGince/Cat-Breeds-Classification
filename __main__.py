@@ -80,8 +80,6 @@ if __name__ == '__main__':
     # Classification
     # -----------------------------------------------------------------------------------------------------------------
 
-    raise NotImplementedError("The classification part is not updated with the new colorizer")
-
     cls_dataset = CatBreedsClassifierDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
 
     # ---------------------------------------------------------
