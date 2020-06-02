@@ -50,13 +50,22 @@ if __name__ == '__main__':
     from hyperparameters import *
     import time
 
+    # -----------------------------------------------------------------------------------------------------------------
+    # hyper-parameters
+    # -----------------------------------------------------------------------------------------------------------------
     tf.random.set_seed(SEED)
+    print(get_str_repr_for_hyper_params())
 
+    # -----------------------------------------------------------------------------------------------------------------
+    # Colorization dataset
+    # -----------------------------------------------------------------------------------------------------------------
     col_dataset = CatColorizerDataset(
         gamut_size=GAMUT_SIZE,
         bins=BINS,
         img_size=IMG_SIZE,
-        batch_size=BATCH_SIZE
+        batch_size=BATCH_SIZE,
+        VAL_SPLIT=COL_VAL_SPLIT,
+        val_virtual_length=None,
     )
     col_dataset.show_gamut_probabilities()
     col_dataset.show_gamut_probabilities(rebin=True)
@@ -87,6 +96,9 @@ if __name__ == '__main__':
 
     plotHistory(col_model_manager.history)
 
+    # -----------------------------------------------------------------------------------------------------------------
+    # Classifier dataset
+    # -----------------------------------------------------------------------------------------------------------------
     cls_dataset = CatBreedsClassifierDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
 
     # -----------------------------------------------------------------------------------------------------------------
