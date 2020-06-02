@@ -222,7 +222,7 @@ class CatColorizer(NetworkModelManager):
                 layer.trainable = True
             else:
                 layer.trainable = False
-            print(layer.name, layer.trainable)
+            # print(layer.name, layer.trainable)
 
         if not pretrained_layer_1:
             return head_model
@@ -269,6 +269,7 @@ class CatBreedsClassifier(NetworkModelManager):
         super(CatBreedsClassifier, self).__init__(**kwargs)
         self.img_size = img_size
         self.learning_rate = learning_rate
+        self.momentum = kwargs.get("momentum", CLS_MOMENTUM)
         self.output_size = output_size
         self.depth_after_fusion = kwargs.get("depth_after_fusion", 256)
         self.pretrained_head = kwargs.get("pretrained_head", True)
@@ -286,6 +287,8 @@ class CatBreedsClassifier(NetworkModelManager):
 
         self.head = self.cat_col_manager.get_head_with_pretrained_weights(self.encoder_input,
                                                                           pretrained=self.pretrained_head)
+
+        self.loss_function = SGD(self.learning_rate, momentum=self.momentum, nesterov=CLS_USE_NESTEROV)
 
     def build(self):
         self.model = Sequential(
@@ -307,7 +310,7 @@ class CatBreedsClassifier(NetworkModelManager):
     def compile(self):
         assert self.model is not None
         self.model.compile(
-            optimizer=Adam(self.learning_rate),
+            optimizer=self.loss_function,
             loss=tf.keras.losses.binary_crossentropy,
             metrics=[
                 'accuracy',
