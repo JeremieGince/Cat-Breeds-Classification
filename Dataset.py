@@ -10,6 +10,7 @@ from PIL import Image, ImageFile
 from scipy.special import softmax as scipy_softmax
 import util
 import warnings
+import hyperparameters
 from hyperparameters import SEED
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -100,12 +101,12 @@ class CatColorizerDataset:
     _URL = r"https://www.kaggle.com/ma7555/cat-breeds-dataset/download/"
     _DIR = r'C:\Users\gince\Documents\GitHub\Cat-Breeds-Classification\Data\cat-breeds-dataset/images'
 
-    BATCH_SIZE = 256
-    IMG_SIZE = 80  # must be more than 80, 80 is recommended
-    VAL_SPLIT = 0.5
-    GAMUT_SIZE = 200  # number of gamut classes
+    BATCH_SIZE = hyperparameters.BATCH_SIZE
+    IMG_SIZE = hyperparameters.IMG_SIZE  # must be more than 80, 80 is recommended
+    VAL_SPLIT = hyperparameters.COL_VAL_SPLIT
+    GAMUT_SIZE = hyperparameters.GAMUT_SIZE  # number of gamut classes
 
-    BINS = 10
+    BINS = hyperparameters.BINS
     GAMUT_DOMAIN_SHAPE = (220, 220)
     NEW_GAMUT_DOMAIN_SHAPE = (GAMUT_DOMAIN_SHAPE[0] // BINS, GAMUT_DOMAIN_SHAPE[1] // BINS)
     GAMUT_DOMAIN = [-110, 110]
@@ -147,12 +148,16 @@ class CatColorizerDataset:
                 batch_size=self.BATCH_SIZE,
                 directory=self.PATH,
                 shuffle=True,
-                seed=3,
+                seed=hyperparameters.SEED,
                 target_size=(self.IMG_SIZE, self.IMG_SIZE),
                 class_mode=None,
                 subset="training"
             )
         )
+
+        val_virtual_length = kwargs.get("val_virtual_length", None)
+        if val_virtual_length is not None:
+            val_virtual_length //= self.BATCH_SIZE
 
         self.val_data_gen = ColorizerDataGenerator(
             self.image_generator.flow_from_directory(
@@ -160,10 +165,10 @@ class CatColorizerDataset:
                 directory=self.PATH,
                 target_size=(self.IMG_SIZE, self.IMG_SIZE),
                 class_mode=None,
-                seed=3,
+                seed=hyperparameters.SEED,
                 subset="validation"
             ),
-            virtual_length=kwargs.get("val_virtual_length", 10_000) // self.BATCH_SIZE
+            virtual_length=val_virtual_length
         ) if self.VAL_SPLIT > 0.0 else None
 
         self.gamut_probabilities = np.zeros(self.GAMUT_DOMAIN_SHAPE, dtype=np.int32)
@@ -315,7 +320,7 @@ class CatBreedsClassifierDataset:
 
     BATCH_SIZE = 256
     IMG_SIZE = 80  # must be more than 80, 80 is recommended
-    VAL_SPLIT = 0.9
+    VAL_SPLIT = hyperparameters.CLS_VAL_SPLIT
 
     def __init__(self, **kwargs):
         self.IMG_SIZE = kwargs.get("img_size", CatColorizerDataset.IMG_SIZE)
@@ -341,7 +346,7 @@ class CatBreedsClassifierDataset:
                 batch_size=self.BATCH_SIZE,
                 directory=self.PATH,
                 shuffle=True,
-                seed=3,
+                seed=hyperparameters.SEED,
                 target_size=(self.IMG_SIZE, self.IMG_SIZE),
                 class_mode="categorical",
                 subset="training"
@@ -354,10 +359,10 @@ class CatBreedsClassifierDataset:
                 directory=self.PATH,
                 target_size=(self.IMG_SIZE, self.IMG_SIZE),
                 class_mode="categorical",
-                seed=3,
+                seed=hyperparameters.SEED,
                 subset="validation"
             ),
-            virtual_length=10_000 // self.BATCH_SIZE
+            virtual_length=hyperparameters.CLS_VAL_VIRTUAL_LENGTH // self.BATCH_SIZE
         )
 
     @property
@@ -399,9 +404,10 @@ class CatBreedsClassifierDataset:
 
 
 if __name__ == '__main__':
-    col_dataset = CatColorizerDataset(img_size=80, batch_size=64, gamut_size=120)
+    col_dataset = CatColorizerDataset(img_size=80, batch_size=64, gamut_size=50)
     col_dataset.plot_samples(5)
-    col_dataset.show_gamut_probabilities(rebin=False, log=True)
+    col_dataset.show_gamut_probabilities(rebin=False, log=True, savefig=False)
+    col_dataset.show_gamut_probabilities(rebin=True, log=True, savefig=False)
 
     # cls_dataset = CatBreedsClassifierDataset(img_size=256, batch_size=100)
     # cls_dataset.plot_samples(5)
