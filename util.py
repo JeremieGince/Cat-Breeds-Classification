@@ -1,5 +1,7 @@
 from skimage import color
 import numpy as np
+from keras import backend as K
+
 from copy import deepcopy
 
 
@@ -125,8 +127,23 @@ def plot_cat_colorization_prediction_samples(model_manager, nb_samples=3, **kwar
 
     plt.tight_layout(pad=0.0)
     if kwargs.get("savefig", True):
-        plt.savefig(f"Figures/{kwargs.get('savename', 'cat_colorization_prediction_samples')}.png", dpi=500)
+        plt.savefig(f"Figures/{kwargs.get('savename', f'{model_manager.name}_prediction_samples')}.png", dpi=500)
     plt.show()
+
+
+def get_latest_checkpoint(checkpoint_dir, ext=".h5", head="cp-"):
+    import os
+    latest = None
+    cp_max = -1
+    for filename in os.listdir(checkpoint_dir):
+        if filename.endswith(ext) and filename.startswith(head):
+            cp = int(filename[filename.find(head) + len(head):filename.find(ext)])
+            if cp > cp_max:
+                cp_max = cp
+                latest = filename
+    if latest is None:
+        return None
+    return checkpoint_dir + "/" + latest
 
 
 def rebin(arr, new_shape):
@@ -172,3 +189,38 @@ def probability_vector2one_hot_vector(probability_vector: np.ndarray) -> np.ndar
 
 def probability_batch2one_hot_batch(probability_batch: np.ndarray) -> np.ndarray:
     return np.apply_along_axis(probability_vector2one_hot_vector, -1, probability_batch)
+
+
+def WeightedCategoricalCrossentropy(weights: np.ndarray):
+    """
+    Reference: https://gist.github.com/wassname/ce364fddfc8a025bfab4348cf5de852d
+    A weighted version of keras.objectives.categorical_crossentropy
+
+    Variables:
+        weights: numpy array of shape (C,) where C is the number of classes
+
+    Usage:
+        weights = np.array([0.5,2,10]) # Class one at 0.5, class 2 twice the normal weights, class 3 10x.
+        loss = weighted_categorical_crossentropy(weights)
+        model.compile(loss=loss,optimizer='adam')
+    """
+    weights = K.variable(weights)
+
+    def _call(y_true, y_pred):
+        # scale predictions so that the class probas of each sample sum to 1
+        y_pred /= K.sum(y_pred, axis=-1, keepdims=True)
+        # clip to prevent NaN's and Inf's
+        y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
+        # calc
+        loss = weights * y_true * K.log(y_pred)
+        loss = -K.sum(loss, -1)
+        return loss
+
+    return _call
+
+
+def normalize(vector: np.ndarray):
+    norm = np.linalg.norm(vector)
+    if norm == 0:
+       return vector
+    return vector / norm
