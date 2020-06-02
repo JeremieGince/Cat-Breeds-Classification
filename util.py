@@ -224,3 +224,5 @@ def normalize(vector: np.ndarray):
     if norm == 0:
        return vector
     return vector / norm
+
+
