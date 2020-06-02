@@ -9,7 +9,7 @@ import util
 from Dataset import CatColorizerDataset, CatBreedsClassifierDataset
 from models import CatColorizer, CatBreedsClassifier
 
-print(tf.__version__)
+print(f"Tensorflow version: {tf.__version__}")
 
 
 def plot_history_comparison(pre_trained_history, no_pre_trained_history):
@@ -62,7 +62,7 @@ if __name__ == '__main__':
     print(f"dataset labels: {col_dataset.labels}")
 
     col_model_manager = CatColorizer(
-        col_dataset.gamut_instances,
+        *col_dataset.get_gamut_params(),
         fusion_depth=FUSION_DEPTH,
         img_size=col_dataset.IMG_SIZE,
         name=f"CatColorizer_gamut-{col_dataset.GAMUT_SIZE}",
