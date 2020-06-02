@@ -19,7 +19,7 @@ if __name__ == '__main__':
     col_overfitting_dataset.show_gamut_probabilities(rebin=True, savefig=False)
 
     col_model_manager = CatColorizer(
-        col_overfitting_dataset.gamut_instances,
+        *col_overfitting_dataset.get_gamut_params(),
         fusion_depth=FUSION_DEPTH,
         img_size=col_overfitting_dataset.IMG_SIZE,
         name=f"CatColorizer_overfitted_gamut-{col_overfitting_dataset.GAMUT_SIZE}",
