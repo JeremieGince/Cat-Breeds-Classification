@@ -2,7 +2,6 @@ import os
 
 import numpy as np
 import tensorflow as tf
-from skimage import color
 from tensorflow.keras import backend as Kbackend
 from tensorflow.keras.initializers import GlorotNormal
 from tensorflow.keras.layers import Conv2D, Input, Reshape, RepeatVector, concatenate, \
@@ -14,20 +13,6 @@ import util
 from hyperparameters import *
 
 os.environ["PATH"] += os.pathsep + r'C:\Program Files (x86)\Graphviz2.38\bin/'
-
-
-def get_latest_checkpoint(checkpoint_dir, ext=".h5", head="cp-"):
-    latest = None
-    cp_max = -1
-    for filename in os.listdir(checkpoint_dir):
-        if filename.endswith(ext) and filename.startswith(head):
-            cp = int(filename[filename.find(head) + len(head):filename.find(ext)])
-            if cp > cp_max:
-                cp_max = cp
-                latest = filename
-    if latest is None:
-        return None
-    return checkpoint_dir + "/" + latest
 
 
 class NetworkModelManager:
@@ -127,10 +112,12 @@ class NetworkManagerCallback(tf.keras.callbacks.Callback):
 
 
 class CatColorizer(NetworkModelManager):
-    def __init__(self, gamut_instances, fusion_depth=FUSION_DEPTH, img_size=IMG_SIZE,
+    def __init__(self, gamut_instances, gamut_probabilities: np.ndarray,
+                 fusion_depth=FUSION_DEPTH, img_size=IMG_SIZE,
                  learning_rate=COL_LEARNING_RATE, **kwargs):
         super(CatColorizer, self).__init__(**kwargs)
         self.gamut_instances = gamut_instances
+        self.gamut_probabilities = gamut_probabilities
         self.output_size = len(gamut_instances)
         self.bins = kwargs.get("bins", 10)
 
@@ -147,6 +134,7 @@ class CatColorizer(NetworkModelManager):
         )
         self.inception_resnet_v2_model.trainable = False
         self.initializer = GlorotNormal()
+        self.loss_function = util.WeightedCategoricalCrossentropy(1 - self.gamut_probabilities)
 
     def _build_encoder(self, encoder_input):
         # encoder
@@ -216,7 +204,7 @@ class CatColorizer(NetworkModelManager):
         self.model = Model(self.encoder_input, probability_distribution, name=self.name)
         return self.model
 
-    def get_head_with_pretrained_weights(self, encoder_input, pretrained=True):
+    def get_head_with_pretrained_weights(self, encoder_input, pretrained=True, pretrained_layer_1=True, **kwargs):
         head = self._build_fusion(
             encoder_input, self._build_encoder(encoder_input)
         )
@@ -228,22 +216,40 @@ class CatColorizer(NetworkModelManager):
             return head_model
 
         # load weights if pretrained is True
-        latest_cp: str = get_latest_checkpoint(self.checkpoint_dir, ext=".h5", head="cp-")
-        self.current_epoch = int(latest_cp[latest_cp.find("cp-") + 3:latest_cp.find(".h5")])
-        head_model.load_weights(latest_cp, by_name=True, skip_mismatch=True)
+        head_model.load_weights(self.checkpoint_path, by_name=True, skip_mismatch=True)
         for layer in head_model.layers:
             if layer.name in encoder_input.name or layer.name == "conv2d_0":
                 layer.trainable = True
             else:
                 layer.trainable = False
-            # print(layer.name, layer.trainable)
+            print(layer.name, layer.trainable)
+
+        if not pretrained_layer_1:
+            return head_model
+
+        model_layer_1 = self.model.get_layer(index=1)
+        head_layer_1 = head_model.get_layer(index=1)
+
+        [pretrained_weights, pretrained_bias] = model_layer_1.get_weights()
+        new_weights = [
+            concatenate([pretrained_weights, pretrained_weights, pretrained_weights], axis=2)/3,
+            pretrained_bias
+        ]
+        assert tuple([layer.shape
+                      for layer in new_weights]) == tuple([layer.shape
+                                                           for layer in head_layer_1.get_weights()]), \
+            "Shape for layer 1 mismatch, try using pretrained_layer_1 = False"
+        head_layer_1.set_weights(new_weights)
+
+        head_layer_1.trainable = kwargs.get("layer_1_trainable_param", True)
+
         return head_model
 
     def compile(self):
         assert self.model is not None
         self.model.compile(
             optimizer=SGD(self.lr, nesterov=True, momentum=self.momentum),
-            loss=tf.keras.losses.CategoricalCrossentropy(),
+            loss=self.loss_function,
             metrics=[
                 'accuracy'
             ]
@@ -268,13 +274,16 @@ class CatBreedsClassifier(NetworkModelManager):
         self.pretrained_head = kwargs.get("pretrained_head", True)
 
         self.encoder_input = Input(shape=(self.img_size, self.img_size, 3), name="encoder_input_3c")
-        self.cat_col_manager = kwargs.get(
-            "cat_col_manager",
-            CatColorizer(
-                self.img_size,
-                name=kwargs.get("cat_col_name", "CatColorizer")
+        self.cat_col_manager = kwargs.get("cat_col_manager", None)
+        if self.cat_col_manager is None:
+            dummy_col_dataset = CatColorizerDataset(img_size=img_size, batch_size=BATCH_SIZE, gamut_size=GAMUT_SIZE)
+            self.cat_col_manager = CatColorizer(
+                *dummy_col_dataset.get_gamut_params(),
+                bins=dummy_col_dataset.BINS,
+                img_size=img_size,
+                name=f"CatColorizer_gamut-{dummy_col_dataset.GAMUT_SIZE}"
             )
-        )
+
         self.head = self.cat_col_manager.get_head_with_pretrained_weights(self.encoder_input,
                                                                           pretrained=self.pretrained_head)
 
@@ -311,34 +320,24 @@ if __name__ == '__main__':
     from tensorflow.keras.utils import plot_model
     from Dataset import CatColorizerDataset
 
-    col_dataset = CatColorizerDataset(img_size=80, batch_size=64, gamut_size=120)
-
-    col_model_manager = CatColorizer(col_dataset.gamut_instances, bins=col_dataset.BINS,
-                                     img_size=80, name="CatColorizer")
-    col_model_manager.build()
+    col_dataset = CatColorizerDataset(img_size=80, batch_size=64, gamut_size=5)
+    col_model_manager = CatColorizer(
+        *col_dataset.get_gamut_params(),
+        bins=col_dataset.BINS,
+        img_size=80,
+        name=f"CatColorizer_overfitted_gamut-{col_dataset.GAMUT_SIZE}"
+    )
+    col_model_manager.build_and_compile()
     print(col_model_manager.summary)
-    print(col_model_manager.model.get_weights()[-1])
-    col_model_manager.load_weights()
-    print(col_model_manager.model.get_weights()[-1])
-    col_model_manager.save_weights(col_model_manager.current_epoch)
 
-    # breeds_classifier_manager = CatBreedsClassifier(
-    #     img_size=80,
-    #     output_size=51,
-    #     name="CatBreedsClassifier",
-    #     cat_col_manager=col_model_manager,
-    #     pretrained_head=False,
-    # )
-    # breeds_classifier_manager.build_and_compile()
-    # print(breeds_classifier_manager.summary)
-    # plot_model(breeds_classifier_manager.model, to_file="Figures/CatBreedsClassifier.png",
-    #            show_layer_names=True, show_shapes=True)
-
-    # new_history = {'loss': [1076.923828125], 'accuracy': [0.4869177043437958], 'mse': [0.010041841305792332], 'mae': [0.06346332281827927], 'mape': [1076.924072265625], 'val_loss': [330.6434020996094], 'val_accuracy': [0.7349596619606018], 'val_mse': [0.010745665989816189], 'val_mae': [0.06535135209560394], 'val_mape': [330.6432189941406]}
-    # col_model_manager.load_history()
-    # print(col_model_manager.history)
-    # col_model_manager.update_history(new_history)
-    # print(col_model_manager.history)
-
-    # model.summary()
-    # plot_model(model, to_file='Figures/CatColorizer.png', show_shapes=True)
+    breeds_classifier_manager = CatBreedsClassifier(
+        img_size=80,
+        output_size=51,
+        name="CatBreedsClassifier",
+        cat_col_manager=col_model_manager,
+        pretrained_head=True,
+    )
+    breeds_classifier_manager.build_and_compile()
+    print(breeds_classifier_manager.summary)
+    plot_model(breeds_classifier_manager.model, to_file="Figures/CatBreedsClassifier.png",
+               show_layer_names=True, show_shapes=True)
