@@ -48,20 +48,30 @@ if __name__ == '__main__':
     from models import CatBreedsClassifier
     from Dataset import CatBreedsClassifierDataset, CatColorizerOverfittingDataset, CatColorizerDataset
     from hyperparameters import *
+    import time
 
-    col_dataset = CatColorizerDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
+    tf.random.set_seed(SEED)
+
+    col_dataset = CatColorizerDataset(
+        gamut_size=GAMUT_SIZE,
+        bins=BINS,
+        img_size=IMG_SIZE,
+        batch_size=BATCH_SIZE
+    )
     col_dataset.show_gamut_probabilities()
     col_dataset.show_gamut_probabilities(rebin=True)
 
     col_model_manager = CatColorizer(
-        col_dataset.gamut_instances,
+        *col_dataset.get_gamut_params(),
         fusion_depth=FUSION_DEPTH,
         img_size=col_dataset.IMG_SIZE,
         name=f"CatColorizer_gamut-{col_dataset.GAMUT_SIZE}",
     )
     col_model_manager.build_and_compile()
 
+    # -----------------------------------------------------------------------------------------------------------------
     # Training the features
+    # -----------------------------------------------------------------------------------------------------------------
     col_trainer = Trainer(
         col_model_manager,
         col_dataset,
@@ -70,14 +80,18 @@ if __name__ == '__main__':
             "save_freq": 1
         }
     )
+    start_time = time.time()
     col_trainer.train(FEATURES_TRAINING_EPOCHS)
-    plotHistory(col_model_manager.history)
+    end_feature_training_time = time.time() - start_time
+    print(f"--- Elapse feature training time: {end_feature_training_time} [s] ---")
 
-    raise NotImplementedError("The classification part is not updated with the new colorizer")
+    plotHistory(col_model_manager.history)
 
     cls_dataset = CatBreedsClassifierDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
 
+    # -----------------------------------------------------------------------------------------------------------------
     # classification with pre-trained features
+    # -----------------------------------------------------------------------------------------------------------------
     cls_model_pretrained_manager = CatBreedsClassifier(
         depth_after_fusion=FUSION_DEPTH,
         img_size=IMG_SIZE,
@@ -89,11 +103,18 @@ if __name__ == '__main__':
     cls_model_pretrained_manager.build_and_compile()
 
     cls_trainer = Trainer(cls_model_pretrained_manager, cls_dataset)
+
+    start_time = time.time()
     cls_trainer.train(CLASSIFIER_EPOCHS)
+    end_cls_pt_training_time = time.time() - start_time
+    print(f"--- Elapse classification with pre-trained features training time: {end_cls_pt_training_time} [s] ---")
+
     cls_model_pretrained_manager.load_history()
     plotHistory(cls_model_pretrained_manager.history)
 
+    # -----------------------------------------------------------------------------------------------------------------
     # classification without pre-trained features
+    # -----------------------------------------------------------------------------------------------------------------
     cls_model_no_pretrained_manager = CatBreedsClassifier(
         depth_after_fusion=FUSION_DEPTH,
         img_size=IMG_SIZE,
@@ -105,6 +126,11 @@ if __name__ == '__main__':
     cls_model_no_pretrained_manager.build_and_compile()
 
     cls_trainer = Trainer(cls_model_no_pretrained_manager, cls_dataset)
+
+    start_time = time.time()
     cls_trainer.train(CLASSIFIER_EPOCHS)
+    end_cls_npt_training_time = time.time() - start_time
+    print(f"--- Elapse classification without pre-trained features training time: {end_cls_npt_training_time} [s] ---")
+
     cls_model_no_pretrained_manager.load_history()
     plotHistory(cls_model_no_pretrained_manager.history)
