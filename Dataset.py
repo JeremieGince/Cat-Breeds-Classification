@@ -7,6 +7,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from skimage import color, transform
 from PIL import Image, ImageFile
+from scipy.special import softmax as scipy_softmax
 import util
 import warnings
 from hyperparameters import SEED
@@ -134,12 +135,11 @@ class CatColorizerDataset:
             "rotation_range": 45,
             "width_shift_range": .15,
             "height_shift_range": .15,
-             "horizontal_flip": True,
-             "zoom_range": 0.5,
+            "horizontal_flip": True,
+            "zoom_range": 0.5,
         } if self.use_augmented_data else {}
 
         args = {**img_gen_base_args, **img_gen_augmented_args}
-        print(args)
         self.image_generator = ImageDataGenerator(**args)  # Generator for our training data
 
         self.train_data_gen = ColorizerDataGenerator(
@@ -170,6 +170,7 @@ class CatColorizerDataset:
         self.gamut_probabilities_rebin = None
         self.nb_ab_instance = 0
         self.gamut_instances = None
+        self.instance_probabilities = None
 
         self._initialize_data_gen()
 
@@ -237,7 +238,13 @@ class CatColorizerDataset:
         for _ in range(nb_to_remove):
             self.gamut_instances.pop(0)
 
+        self.instance_probabilities = scipy_softmax(np.array([self.gamut_probabilities_rebin[t]
+                                                              for t in self.gamut_instances]))
+
         return self.gamut_instances
+
+    def get_gamut_params(self):
+        return self.gamut_instances, self.instance_probabilities
 
     def show_gamut_probabilities(self, **kwargs):
         rebin = kwargs.get("rebin", False)
