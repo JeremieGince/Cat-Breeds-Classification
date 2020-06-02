@@ -26,6 +26,7 @@ def plot_history_comparison(pre_trained_history, no_pre_trained_history):
     axes[1].set_xlabel("epochs")
 
     plt.legend(loc='upper right')
+    plt.savefig(f"Figures/training_curve_comparison.png", dpi=500)
     plt.show()
 
 
@@ -33,6 +34,7 @@ if __name__ == '__main__':
     # -----------------------------------------------------------------------------------------------------------------
     # hyper-parameters
     # -----------------------------------------------------------------------------------------------------------------
+    import hyperparameters
     from hyperparameters import SEED, \
                                 BATCH_SIZE,\
                                 IMG_SIZE, \
@@ -45,9 +47,25 @@ if __name__ == '__main__':
     # setting the seed
     tf.random.set_seed(SEED)
 
+    print(
+        """
+        -----------------------------------------------------------------------------------------------------------------
+                                                                hyper-parameters
+        -----------------------------------------------------------------------------------------------------------------
+        """
+    )
+    print(hyperparameters.get_str_repr_for_hyper_params())
+
     # -----------------------------------------------------------------------------------------------------------------
     # colorization
     # -----------------------------------------------------------------------------------------------------------------
+    print(
+        """
+        -----------------------------------------------------------------------------------------------------------------
+                                                                colorization
+        -----------------------------------------------------------------------------------------------------------------
+        """
+    )
 
     col_dataset = CatColorizerDataset(
         gamut_size=GAMUT_SIZE,
@@ -73,18 +91,27 @@ if __name__ == '__main__':
     col_model_manager.model.summary()
     plot_model(col_model_manager.model, to_file=f"Figures/{col_model_manager.name}.png",
                show_layer_names=True, show_shapes=True)
-    util.plotHistory(col_model_manager.history)
+    util.plotHistory(col_model_manager.history, savename=f"{col_model_manager.name}_training_curve")
     util.plot_cat_colorization_prediction_samples(col_model_manager)
 
     # -----------------------------------------------------------------------------------------------------------------
     # Classification
     # -----------------------------------------------------------------------------------------------------------------
-
+    print("""
+    -----------------------------------------------------------------------------------------------------------------
+                                                            Classification
+    -----------------------------------------------------------------------------------------------------------------
+    """)
     cls_dataset = CatBreedsClassifierDataset(img_size=IMG_SIZE, batch_size=BATCH_SIZE)
 
     # ---------------------------------------------------------
     # classification with pre-trained features
     # ---------------------------------------------------------
+    print("""
+            ---------------------------------------------------------
+                  classification with pre-trained features
+            ---------------------------------------------------------
+            """)
     cls_model_pretrained_manager = CatBreedsClassifier(
         depth_after_fusion=FUSION_DEPTH,
         img_size=IMG_SIZE,
@@ -94,16 +121,23 @@ if __name__ == '__main__':
         pretrained_head=True,
     )
     cls_model_pretrained_manager.build_and_compile()
+    cls_model_pretrained_manager.model.summary()
     plot_model(cls_model_pretrained_manager.model,
                to_file=f"Figures/{cls_model_pretrained_manager.name}.png",
                show_layer_names=True, show_shapes=True)
 
     cls_model_pretrained_manager.load_history()
-    util.plotHistory(cls_model_pretrained_manager.history)
+    util.plotHistory(cls_model_pretrained_manager.history,
+                     savename=f"{cls_model_pretrained_manager.name}_training_curve")
 
     # ---------------------------------------------------------
     # classification without pre-trained features
     # ---------------------------------------------------------
+    print("""
+        ---------------------------------------------------------
+              classification without pre-trained features
+        ---------------------------------------------------------
+        """)
     cls_model_no_pretrained_manager = CatBreedsClassifier(
         depth_after_fusion=FUSION_DEPTH,
         img_size=IMG_SIZE,
@@ -113,14 +147,21 @@ if __name__ == '__main__':
         pretrained_head=False,
     )
     cls_model_no_pretrained_manager.build_and_compile()
+    cls_model_no_pretrained_manager.model.summary()
     plot_model(cls_model_no_pretrained_manager.model,
                to_file=f"Figures/{cls_model_no_pretrained_manager.name}.png",
                show_layer_names=True, show_shapes=True)
 
     cls_model_no_pretrained_manager.load_history()
-    util.plotHistory(cls_model_no_pretrained_manager.history)
+    util.plotHistory(cls_model_no_pretrained_manager.history,
+                     savename=f"{cls_model_no_pretrained_manager.name}_training_curve")
 
     # ---------------------------------------------------------
     # comparison
     # ---------------------------------------------------------
+    print("""
+    ---------------------------------------------------------
+                          comparison
+    ---------------------------------------------------------
+    """)
     plot_history_comparison(cls_model_pretrained_manager.history, cls_model_no_pretrained_manager.history)
