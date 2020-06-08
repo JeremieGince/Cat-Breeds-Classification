@@ -14,3 +14,7 @@ if __name__ == '__main__':
         print(os.system("nvidia-smi"), '\n')
     elif platform.system() == "Windows":
         print(os.system(r"cd C:\Program Files\NVIDIA Corporation\NVSMI & nvidia-smi"), '\n')
+
+    with open(os.getcwd()+'/requirements.txt', 'r') as requirement_file:
+        print(f"\n requirements: \n"
+              f"{requirement_file.read()} \n")
