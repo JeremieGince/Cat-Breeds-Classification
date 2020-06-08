@@ -13,6 +13,7 @@ if __name__ == '__main__':
     elif platform.system() == "Windows":
         print(os.system(r"cd C:\Program Files\NVIDIA Corporation\NVSMI & nvidia-smi"))
 
-    test_model = tensorflow.keras.models.Model()
+    inp = tensorflow.keras.layers.Input(10)
+    test_model = tensorflow.keras.models.Model(inp, tensorflow.keras.layers.Dense(10)(inp))
     test_model.compile()
     test_model.summary()
