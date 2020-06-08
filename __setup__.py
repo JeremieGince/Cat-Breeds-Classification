@@ -17,5 +17,5 @@ if __name__ == '__main__':
 
     inp = tensorflow.keras.layers.Input(10)
     test_model = tensorflow.keras.models.Model(inp, tensorflow.keras.layers.Dense(10)(inp))
-    test_model.compile()
+    test_model.compile(loss=tensorflow.keras.losses.binary_crossentropy)
     test_model.summary()
