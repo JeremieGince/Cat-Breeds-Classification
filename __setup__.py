@@ -12,3 +12,7 @@ if __name__ == '__main__':
         print(os.system("nvidia-smi"))
     elif platform.system() == "Windows":
         print(os.system(r"cd C:\Program Files\NVIDIA Corporation\NVSMI & nvidia-smi"))
+
+    test_model = tensorflow.keras.models.Model()
+    test_model.compile()
+    test_model.summary()
