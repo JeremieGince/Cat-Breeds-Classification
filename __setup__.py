@@ -4,6 +4,7 @@ import sys, os, platform
 
 if __name__ == '__main__':
     print(f"Tensorflow version: {tensorflow.__version__} \n")
+    print(f"Gpu device name: {tensorflow.test.gpu_device_name()}, available: {tensorflow.test.is_gpu_available()} \n")
     print(*device_lib.list_local_devices(), '\n', sep='\n')
 
     if tensorflow.__version__ == "2.2.0":
